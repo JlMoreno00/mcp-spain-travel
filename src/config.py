@@ -5,7 +5,7 @@ Use :func:`get_settings` to obtain the singleton instance.
 
 Example env vars::
 
-    SPAIN_TRAVEL_DUFFEL_ACCESS_TOKEN=duffel_test_xxxxx
+    SPAIN_TRAVEL_SERPAPI_API_KEY=your_serpapi_key
     SPAIN_TRAVEL_OUIGO_ENABLED=true
     SPAIN_TRAVEL_LOG_LEVEL=DEBUG
 """
@@ -29,8 +29,8 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    # --- Duffel API credentials (required for flights) ---
-    duffel_access_token: str = ""
+    # --- SerpApi credentials (required for flights via Google Flights) ---
+    serpapi_api_key: str = ""
 
     # --- Feature flags ---
     ouigo_enabled: bool = True

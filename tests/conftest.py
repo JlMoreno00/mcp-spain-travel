@@ -19,7 +19,7 @@ def clear_settings_cache():
 
 @pytest.fixture
 def mock_env(monkeypatch):
-    monkeypatch.setenv("SPAIN_TRAVEL_DUFFEL_ACCESS_TOKEN", "duffel_test_fake_token")
+    monkeypatch.setenv("SPAIN_TRAVEL_SERPAPI_API_KEY", "test_serpapi_key_fake")
     monkeypatch.setenv("SPAIN_TRAVEL_OUIGO_ENABLED", "true")
     monkeypatch.setenv("SPAIN_TRAVEL_CACHE_DIR", "/tmp/test_spain_travel_cache")
     get_settings.cache_clear()

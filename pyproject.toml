@@ -17,7 +17,7 @@ dependencies = [
     "pydantic>=2",
     "pydantic-settings>=2.0",
     "ouigo>=1.0.4,<2.0",
-    "duffel-api>=0.5",
+
 ]
 
 [project.optional-dependencies]
