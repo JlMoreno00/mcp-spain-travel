@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mcp-spain-travel"
+version = "0.1.0"
+description = "Multimodal travel search for Spain — trains and flights via MCP"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["mcp", "travel", "spain", "renfe", "ouigo", "amadeus"]
+
+dependencies = [
+    "fastmcp>=3.0.2",
+    "httpx>=0.27",
+    "pydantic>=2",
+    "pydantic-settings>=2.0",
+    "ouigo>=1.0.4,<2.0",
+    "amadeus>=9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+    "freezegun>=1.4",
+]
+
+[project.scripts]
+mcp-spain-travel = "src.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 99
+target-version = "py311"

@@ -1,0 +1,164 @@
+"""Train search tools — combines Renfe CKAN and OUIGO providers."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from datetime import date as _Date
+from typing import Any
+
+from src.providers.ouigo import OUIGOProvider
+from src.providers.renfe.ckan import RenfeCKANProvider
+
+logger = logging.getLogger(__name__)
+
+
+async def search_trains(
+    origin: str,
+    destination: str,
+    date: str,
+    passengers: int = 1,
+) -> dict[str, Any]:
+    """Combine Renfe GTFS and OUIGO results for a given train route.
+
+    Validates the date, runs both providers concurrently, and gracefully
+    degrades if one provider fails (partial=True in the response).
+
+    Returns:
+        {"results": [...], "count": int, "partial": bool, "provider_errors": [...]}
+        or {"error": {"code": "...", "message": "..."}}
+    """
+    try:
+        travel_date = _Date.fromisoformat(date)
+    except ValueError:
+        return {
+            "error": {
+                "code": "INVALID_DATE",
+                "message": f"Invalid date format: {date!r}. Use YYYY-MM-DD.",
+            }
+        }
+
+    if travel_date < _Date.today():
+        return {
+            "error": {
+                "code": "INVALID_DATE",
+                "message": "Date must be today or in the future.",
+            }
+        }
+
+    renfe = RenfeCKANProvider()
+    ouigo = OUIGOProvider()
+
+    ouigo_result, renfe_result = await asyncio.gather(
+        ouigo.search_trains(origin, destination, date, passengers),
+        renfe.search_trains(origin, destination, date, passengers),
+        return_exceptions=True,
+    )
+
+    provider_errors: list[str] = []
+    results = []
+
+    if isinstance(ouigo_result, Exception):
+        logger.warning(
+            "OUIGO search failed (origin=%s, dest=%s): %s", origin, destination, ouigo_result
+        )
+        provider_errors.append(f"OUIGO: {ouigo_result}")
+    elif isinstance(ouigo_result, list):
+        results.extend(ouigo_result)
+
+    if isinstance(renfe_result, Exception):
+        logger.warning(
+            "Renfe search failed (origin=%s, dest=%s): %s", origin, destination, renfe_result
+        )
+        provider_errors.append(f"Renfe: {renfe_result}")
+    elif isinstance(renfe_result, list):
+        results.extend(renfe_result)
+
+    if not results and len(provider_errors) == 2:
+        return {
+            "error": {
+                "code": "ALL_PROVIDERS_DOWN",
+                "message": "All train providers are unavailable. Please try again later.",
+            }
+        }
+
+    if not results and not provider_errors:
+        try:
+            stations = await renfe.list_stations()
+            origin_lower = origin.lower()
+            dest_lower = destination.lower()
+
+            origin_found = any(
+                origin_lower in s.code.lower()
+                or origin_lower in s.city.lower()
+                or origin_lower in s.name.lower()
+                for s in stations
+            )
+            dest_found = any(
+                dest_lower in s.code.lower()
+                or dest_lower in s.city.lower()
+                or dest_lower in s.name.lower()
+                for s in stations
+            )
+
+            if not origin_found:
+                return {
+                    "error": {
+                        "code": "UNKNOWN_STATION",
+                        "message": (
+                            f"Station not found: {origin!r}. "
+                            "Use a Spanish city name or Renfe station code."
+                        ),
+                    }
+                }
+            if not dest_found:
+                return {
+                    "error": {
+                        "code": "UNKNOWN_STATION",
+                        "message": (
+                            f"Station not found: {destination!r}. "
+                            "Use a Spanish city name or Renfe station code."
+                        ),
+                    }
+                }
+        except Exception as exc:
+            logger.warning("Station validation lookup failed: %s", exc)
+
+    results.sort(key=lambda r: r.departure_time)
+
+    return {
+        "results": [r.model_dump(mode="json") for r in results],
+        "count": len(results),
+        "partial": len(provider_errors) > 0,
+        "provider_errors": provider_errors,
+    }
+
+
+async def list_train_stations(
+    city: str | None = None,
+    station_type: str = "all",
+) -> dict[str, Any]:
+    """Return Renfe station catalog filtered by city name and/or service type.
+
+    Stations are cached for 24 hours (file-based).
+
+    Returns:
+        {"stations": [...], "count": int}
+        or {"error": {"code": "PROVIDER_ERROR", "message": "..."}}
+    """
+    renfe = RenfeCKANProvider()
+    try:
+        stations = await renfe.list_stations(city=city, station_type=station_type)
+    except Exception as exc:
+        logger.error("Failed to list stations: %s", exc)
+        return {
+            "error": {
+                "code": "PROVIDER_ERROR",
+                "message": f"Failed to fetch stations: {exc}",
+            }
+        }
+
+    return {
+        "stations": [s.model_dump() for s in stations],
+        "count": len(stations),
+    }
