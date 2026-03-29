@@ -5,7 +5,7 @@ import re
 from datetime import date as _Date
 from typing import Any
 
-from src.providers.amadeus import AmadeusProvider, RateLimitError
+from src.providers.duffel import DuffelProvider, RateLimitError
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +66,9 @@ async def search_flights(
             }
         }
 
-    amadeus = AmadeusProvider()
+    duffel = DuffelProvider()
     try:
-        results = await amadeus.search_flights(
+        results = await duffel.search_flights(
             origin=origin_code,
             destination=dest_code,
             departure_date=departure_date,
@@ -80,11 +80,11 @@ async def search_flights(
         return {
             "error": {
                 "code": "RATE_LIMIT",
-                "message": "Amadeus quota exceeded, retry later.",
+                "message": "Duffel quota exceeded, retry later.",
             }
         }
     except Exception as exc:
-        logger.error("Amadeus search failed (origin=%s, dest=%s): %s", origin_code, dest_code, exc)
+        logger.error("Duffel search failed (origin=%s, dest=%s): %s", origin_code, dest_code, exc)
         return {
             "error": {
                 "code": "PROVIDER_ERROR",

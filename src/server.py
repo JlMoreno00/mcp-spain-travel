@@ -111,5 +111,13 @@ async def list_train_stations(
 
 def main() -> None:
     settings = get_settings()
-    logger.info("Starting Spain Travel Planner MCP server (log_level=%s)", settings.log_level)
-    mcp.run()
+    logger.info(
+        "Starting Spain Travel Planner MCP (%s on %s:%s)",
+        settings.transport,
+        settings.host,
+        settings.port,
+    )
+    if settings.transport == "stdio":
+        mcp.run()
+    else:
+        mcp.run(transport=settings.transport, host=settings.host, port=settings.port)

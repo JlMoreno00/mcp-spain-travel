@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.providers.amadeus import RateLimitError
+from src.providers.duffel import RateLimitError
 from src.tools.flights import search_flights
 
 
@@ -26,7 +26,7 @@ class TestSearchFlightsValidation:
         mock_provider = AsyncMock()
         mock_provider.search_flights.return_value = [sample_flight_result]
 
-        with patch("src.tools.flights.AmadeusProvider", return_value=mock_provider):
+        with patch("src.tools.flights.DuffelProvider", return_value=mock_provider):
             result = await search_flights("mad", "bcn", _future_date())
 
         assert "error" not in result
@@ -57,7 +57,7 @@ class TestSearchFlightsHappyPath:
         mock_provider = AsyncMock()
         mock_provider.search_flights.return_value = [sample_flight_result]
 
-        with patch("src.tools.flights.AmadeusProvider", return_value=mock_provider):
+        with patch("src.tools.flights.DuffelProvider", return_value=mock_provider):
             result = await search_flights("MAD", "BCN", _future_date())
 
         assert "error" not in result
@@ -69,7 +69,7 @@ class TestSearchFlightsHappyPath:
         mock_provider = AsyncMock()
         mock_provider.search_flights.return_value = [sample_flight_result]
 
-        with patch("src.tools.flights.AmadeusProvider", return_value=mock_provider):
+        with patch("src.tools.flights.DuffelProvider", return_value=mock_provider):
             await search_flights("MAD", "BCN", _future_date(), return_date="2099-06-22")
 
         call_kwargs = mock_provider.search_flights.call_args.kwargs
@@ -79,7 +79,7 @@ class TestSearchFlightsHappyPath:
         mock_provider = AsyncMock()
         mock_provider.search_flights.return_value = [sample_flight_result]
 
-        with patch("src.tools.flights.AmadeusProvider", return_value=mock_provider):
+        with patch("src.tools.flights.DuffelProvider", return_value=mock_provider):
             await search_flights("MAD", "BCN", _future_date(), adults=2, cabin_class="BUSINESS")
 
         call_kwargs = mock_provider.search_flights.call_args.kwargs
@@ -90,7 +90,7 @@ class TestSearchFlightsHappyPath:
         mock_provider = AsyncMock()
         mock_provider.search_flights.return_value = []
 
-        with patch("src.tools.flights.AmadeusProvider", return_value=mock_provider):
+        with patch("src.tools.flights.DuffelProvider", return_value=mock_provider):
             result = await search_flights("MAD", "BCN", _future_date())
 
         assert result["count"] == 0
@@ -102,7 +102,7 @@ class TestSearchFlightsErrorHandling:
         mock_provider = AsyncMock()
         mock_provider.search_flights.side_effect = RateLimitError("quota exceeded")
 
-        with patch("src.tools.flights.AmadeusProvider", return_value=mock_provider):
+        with patch("src.tools.flights.DuffelProvider", return_value=mock_provider):
             result = await search_flights("MAD", "BCN", _future_date())
 
         assert result["error"]["code"] == "RATE_LIMIT"
@@ -112,7 +112,7 @@ class TestSearchFlightsErrorHandling:
         mock_provider = AsyncMock()
         mock_provider.search_flights.side_effect = RuntimeError("unexpected crash")
 
-        with patch("src.tools.flights.AmadeusProvider", return_value=mock_provider):
+        with patch("src.tools.flights.DuffelProvider", return_value=mock_provider):
             result = await search_flights("MAD", "BCN", _future_date())
 
         assert result["error"]["code"] == "PROVIDER_ERROR"

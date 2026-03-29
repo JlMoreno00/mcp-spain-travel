@@ -145,13 +145,23 @@ async def compare_travel_options(
 
     options: list[TravelOption] = []
     missing_modes: list[str] = []
+    provider_errors: list[dict[str, str]] = []
 
     if isinstance(train_resp, Exception):
         logger.warning("Train search raised exception in compare: %s", train_resp)
         missing_modes.append("train")
+        provider_errors.append({"mode": "train", "code": "EXCEPTION", "message": str(train_resp)})
     elif isinstance(train_resp, dict) and "error" in train_resp:
-        logger.info("Train search returned error in compare: %s", train_resp["error"].get("code"))
+        err = train_resp["error"]
+        logger.info("Train search returned error in compare: %s", err.get("code"))
         missing_modes.append("train")
+        provider_errors.append(
+            {
+                "mode": "train",
+                "code": err.get("code", "UNKNOWN"),
+                "message": err.get("message", ""),
+            }
+        )
     elif isinstance(train_resp, dict):
         co2 = _co2_kg("train", distance_km, passengers)
         for r in train_resp.get("results", []):
@@ -174,11 +184,20 @@ async def compare_travel_options(
     if isinstance(flight_resp, Exception):
         logger.warning("Flight search raised exception in compare: %s", flight_resp)
         missing_modes.append("flight")
-    elif isinstance(flight_resp, dict) and "error" in flight_resp:
-        logger.info(
-            "Flight search returned error in compare: %s", flight_resp["error"].get("code")
+        provider_errors.append(
+            {"mode": "flight", "code": "EXCEPTION", "message": str(flight_resp)}
         )
+    elif isinstance(flight_resp, dict) and "error" in flight_resp:
+        err = flight_resp["error"]
+        logger.info("Flight search returned error in compare: %s", err.get("code"))
         missing_modes.append("flight")
+        provider_errors.append(
+            {
+                "mode": "flight",
+                "code": err.get("code", "UNKNOWN"),
+                "message": err.get("message", ""),
+            }
+        )
     elif isinstance(flight_resp, dict):
         co2 = _co2_kg("flight", distance_km, passengers)
         for r in flight_resp.get("results", []):
@@ -214,4 +233,7 @@ async def compare_travel_options(
         partial=len(missing_modes) > 0,
         missing_modes=missing_modes,
     )
-    return comparison.model_dump(mode="json")
+    result = comparison.model_dump(mode="json")
+    if provider_errors:
+        result["provider_errors"] = provider_errors
+    return result
