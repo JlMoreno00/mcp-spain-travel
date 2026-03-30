@@ -6,6 +6,8 @@ from typing import Any
 from fastmcp import FastMCP
 
 from src.config import get_settings
+from src.tools.buses import list_bus_stations as _list_bus_stations
+from src.tools.buses import search_buses as _search_buses
 from src.tools.flights import search_flights as _search_flights
 from src.tools.multimodal import compare_travel_options as _compare_travel_options
 from src.tools.trains import list_train_stations as _list_train_stations
@@ -90,6 +92,36 @@ async def compare_travel_options(
         passengers: Number of passengers (default 1)
     """
     return await _compare_travel_options(origin, destination, date, passengers)
+
+
+@mcp.tool()
+async def search_buses(
+    origin: str,
+    destination: str,
+    date: str,
+    passengers: int = 1,
+) -> dict[str, Any]:
+    """Search for bus routes in Spain via FlixBus.
+
+    Requires SPAIN_TRAVEL_FLIXBUS_API_KEY env var (RapidAPI key for flixbus2.p.rapidapi.com).
+
+    Args:
+        origin: Spanish city name (e.g. "Madrid", "Barcelona", "Sevilla")
+        destination: Spanish city name
+        date: Travel date in YYYY-MM-DD format — must be today or future
+        passengers: Number of passengers (default 1)
+    """
+    return await _search_buses(origin, destination, date, passengers)
+
+
+@mcp.tool()
+async def list_bus_stations(city: str) -> dict[str, Any]:
+    """Find FlixBus bus stations in a Spanish city.
+
+    Args:
+        city: Spanish city name to search for bus stations (e.g. "Madrid", "Barcelona")
+    """
+    return await _list_bus_stations(city)
 
 
 @mcp.tool()

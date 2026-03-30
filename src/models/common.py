@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, model_validator
 
 if TYPE_CHECKING:
+    from src.models.bus import BusResult
     from src.models.flight import FlightResult
     from src.models.train import TrainResult
 
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
 class TravelMode(str, Enum):
     TRAIN = "train"
     FLIGHT = "flight"
+    BUS = "bus"
 
 
 class TravelOption(BaseModel):
@@ -43,6 +45,18 @@ class TravelOption(BaseModel):
         return cls(
             mode=TravelMode.FLIGHT,
             operator=result.airline,
+            departure_time=result.departure_time,
+            arrival_time=result.arrival_time,
+            duration_minutes=result.duration_minutes,
+            price_eur=result.price_eur,
+            booking_url=result.booking_url,
+        )
+
+    @classmethod
+    def from_bus_result(cls, result: BusResult) -> TravelOption:
+        return cls(
+            mode=TravelMode.BUS,
+            operator=result.operator,
             departure_time=result.departure_time,
             arrival_time=result.arrival_time,
             duration_minutes=result.duration_minutes,

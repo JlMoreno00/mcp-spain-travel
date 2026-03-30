@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from src.models.common import TravelComparison, TravelMode, TravelOption
+from src.tools.buses import search_buses
 from src.tools.flights import search_flights
 from src.tools.trains import search_trains
 
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 _CO2_TRAIN_KG_PER_KM = 0.014
 _CO2_FLIGHT_KG_PER_KM = 0.255
+_CO2_BUS_KG_PER_KM = 0.027
 
 _DISTANCES_KM: dict[frozenset[str], int] = {
     frozenset({"madrid", "barcelona"}): 620,
@@ -96,7 +98,12 @@ def _get_distance_km(origin: str, destination: str) -> int:
 
 
 def _co2_kg(mode: str, distance_km: int, passengers: int) -> float:
-    factor = _CO2_FLIGHT_KG_PER_KM if mode == "flight" else _CO2_TRAIN_KG_PER_KM
+    if mode == "flight":
+        factor = _CO2_FLIGHT_KG_PER_KM
+    elif mode == "bus":
+        factor = _CO2_BUS_KG_PER_KM
+    else:
+        factor = _CO2_TRAIN_KG_PER_KM
     return round(factor * distance_km * passengers, 2)
 
 
@@ -137,9 +144,10 @@ async def compare_travel_options(
     origin_iata = _to_iata(origin)
     dest_iata = _to_iata(destination)
 
-    train_resp, flight_resp = await asyncio.gather(
+    train_resp, flight_resp, bus_resp = await asyncio.gather(
         search_trains(origin, destination, date, passengers),
         search_flights(origin_iata, dest_iata, date, adults=passengers),
+        search_buses(origin, destination, date, passengers),
         return_exceptions=True,
     )
 
@@ -217,7 +225,41 @@ async def compare_travel_options(
             except Exception as exc:
                 logger.warning("Skipping malformed flight result: %s", exc)
 
-    if not options and len(missing_modes) == 2:
+    if isinstance(bus_resp, Exception):
+        logger.warning("Bus search raised exception in compare: %s", bus_resp)
+        missing_modes.append("bus")
+        provider_errors.append({"mode": "bus", "code": "EXCEPTION", "message": str(bus_resp)})
+    elif isinstance(bus_resp, dict) and "error" in bus_resp:
+        err = bus_resp["error"]
+        logger.info("Bus search returned error in compare: %s", err.get("code"))
+        missing_modes.append("bus")
+        provider_errors.append(
+            {
+                "mode": "bus",
+                "code": err.get("code", "UNKNOWN"),
+                "message": err.get("message", ""),
+            }
+        )
+    elif isinstance(bus_resp, dict):
+        co2 = _co2_kg("bus", distance_km, passengers)
+        for r in bus_resp.get("results", []):
+            try:
+                options.append(
+                    TravelOption(
+                        mode=TravelMode.BUS,
+                        operator=r["operator"],
+                        departure_time=datetime.fromisoformat(r["departure_time"]),
+                        arrival_time=datetime.fromisoformat(r["arrival_time"]),
+                        duration_minutes=r["duration_minutes"],
+                        price_eur=r.get("price_eur"),
+                        co2_kg=co2,
+                        booking_url=r.get("booking_url"),
+                    )
+                )
+            except Exception as exc:
+                logger.warning("Skipping malformed bus result: %s", exc)
+
+    if not options and len(missing_modes) == 3:
         return {
             "error": {
                 "code": "ALL_PROVIDERS_DOWN",

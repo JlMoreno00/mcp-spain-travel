@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # --- SerpApi credentials (required for flights via Google Flights) ---
     serpapi_api_key: str = ""
 
+    # --- FlixBus / RapidAPI credentials ---
+    flixbus_api_key: str = ""
+
     # --- Feature flags ---
     ouigo_enabled: bool = True
 

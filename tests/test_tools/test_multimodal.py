@@ -30,6 +30,17 @@ def _flight_response(sample_flight_result) -> dict:
     }
 
 
+def _bus_response(sample_bus_result) -> dict:
+    return {
+        "results": [sample_bus_result.model_dump(mode="json")],
+        "count": 1,
+    }
+
+
+_NO_BUS = {"results": [], "count": 0}
+_BUS_ERROR = {"error": {"code": "UNKNOWN_CITY", "message": "city not found"}}
+
+
 class TestCompareTravelOptionsValidation:
     async def test_past_date_returns_invalid_date_error(self):
         result = await compare_travel_options("Madrid", "Barcelona", "2020-01-01")
@@ -50,6 +61,7 @@ class TestCompareTravelOptionsBothModes:
         with (
             patch("src.tools.multimodal.search_trains", return_value=train_resp),
             patch("src.tools.multimodal.search_flights", return_value=flight_resp),
+            patch("src.tools.multimodal.search_buses", return_value=_NO_BUS),
         ):
             result = await compare_travel_options("Madrid", "Barcelona", _future_date())
 
@@ -68,6 +80,7 @@ class TestCompareTravelOptionsBothModes:
         with (
             patch("src.tools.multimodal.search_trains", return_value=train_resp),
             patch("src.tools.multimodal.search_flights", return_value=flight_resp),
+            patch("src.tools.multimodal.search_buses", return_value=_NO_BUS),
         ):
             result = await compare_travel_options("Madrid", "Barcelona", _future_date())
 
@@ -82,6 +95,7 @@ class TestCompareTravelOptionsBothModes:
         with (
             patch("src.tools.multimodal.search_trains", return_value=train_resp),
             patch("src.tools.multimodal.search_flights", return_value=flight_resp),
+            patch("src.tools.multimodal.search_buses", return_value=_NO_BUS),
         ):
             result = await compare_travel_options("Madrid", "Barcelona", _future_date())
 
@@ -96,6 +110,7 @@ class TestCompareTravelOptionsBothModes:
         with (
             patch("src.tools.multimodal.search_trains", return_value=train_resp),
             patch("src.tools.multimodal.search_flights", return_value=flight_resp),
+            patch("src.tools.multimodal.search_buses", return_value=_NO_BUS),
         ):
             result = await compare_travel_options("Madrid", "Barcelona", _future_date())
 
@@ -112,12 +127,105 @@ class TestCompareTravelOptionsBothModes:
         with (
             patch("src.tools.multimodal.search_trains", return_value=train_resp) as mock_trains,
             patch("src.tools.multimodal.search_flights", return_value=flight_resp) as mock_flights,
+            patch("src.tools.multimodal.search_buses", return_value=_NO_BUS),
         ):
             await compare_travel_options("Madrid", "Barcelona", _future_date())
 
         flight_call_args = mock_flights.call_args
         assert flight_call_args.args[0] == "MAD"
         assert flight_call_args.args[1] == "BCN"
+
+
+class TestCompareTravelOptionsBusMode:
+    async def test_bus_results_included_when_available(
+        self, sample_train_result, sample_flight_result, sample_bus_result
+    ):
+        with (
+            patch(
+                "src.tools.multimodal.search_trains",
+                return_value=_train_response(sample_train_result),
+            ),
+            patch(
+                "src.tools.multimodal.search_flights",
+                return_value=_flight_response(sample_flight_result),
+            ),
+            patch(
+                "src.tools.multimodal.search_buses",
+                return_value=_bus_response(sample_bus_result),
+            ),
+        ):
+            result = await compare_travel_options("Madrid", "Barcelona", _future_date())
+
+        assert "error" not in result
+        modes = {opt["mode"] for opt in result["options"]}
+        assert "bus" in modes
+        assert result["partial"] is False
+
+    async def test_bus_co2_between_train_and_flight(
+        self, sample_train_result, sample_flight_result, sample_bus_result
+    ):
+        with (
+            patch(
+                "src.tools.multimodal.search_trains",
+                return_value=_train_response(sample_train_result),
+            ),
+            patch(
+                "src.tools.multimodal.search_flights",
+                return_value=_flight_response(sample_flight_result),
+            ),
+            patch(
+                "src.tools.multimodal.search_buses",
+                return_value=_bus_response(sample_bus_result),
+            ),
+        ):
+            result = await compare_travel_options("Madrid", "Barcelona", _future_date())
+
+        train_co2 = next(o["co2_kg"] for o in result["options"] if o["mode"] == "train")
+        bus_co2 = next(o["co2_kg"] for o in result["options"] if o["mode"] == "bus")
+        flight_co2 = next(o["co2_kg"] for o in result["options"] if o["mode"] == "flight")
+        assert train_co2 < bus_co2 < flight_co2
+
+    async def test_bus_error_still_returns_trains_and_flights(
+        self, sample_train_result, sample_flight_result
+    ):
+        with (
+            patch(
+                "src.tools.multimodal.search_trains",
+                return_value=_train_response(sample_train_result),
+            ),
+            patch(
+                "src.tools.multimodal.search_flights",
+                return_value=_flight_response(sample_flight_result),
+            ),
+            patch("src.tools.multimodal.search_buses", return_value=_BUS_ERROR),
+        ):
+            result = await compare_travel_options("Madrid", "Barcelona", _future_date())
+
+        assert "error" not in result
+        assert result["partial"] is True
+        assert "bus" in result["missing_modes"]
+        modes = {opt["mode"] for opt in result["options"]}
+        assert "train" in modes
+        assert "flight" in modes
+
+    async def test_bus_exception_still_returns_trains_and_flights(
+        self, sample_train_result, sample_flight_result
+    ):
+        with (
+            patch(
+                "src.tools.multimodal.search_trains",
+                return_value=_train_response(sample_train_result),
+            ),
+            patch(
+                "src.tools.multimodal.search_flights",
+                return_value=_flight_response(sample_flight_result),
+            ),
+            patch("src.tools.multimodal.search_buses", side_effect=RuntimeError("bus crash")),
+        ):
+            result = await compare_travel_options("Madrid", "Barcelona", _future_date())
+
+        assert "error" not in result
+        assert result["partial"] is True
 
 
 class TestCompareTravelOptionsPartial:
@@ -128,6 +236,7 @@ class TestCompareTravelOptionsPartial:
         with (
             patch("src.tools.multimodal.search_trains", return_value=train_resp),
             patch("src.tools.multimodal.search_flights", return_value=flight_resp),
+            patch("src.tools.multimodal.search_buses", return_value=_BUS_ERROR),
         ):
             result = await compare_travel_options("Madrid", "Barcelona", _future_date())
 
@@ -144,6 +253,7 @@ class TestCompareTravelOptionsPartial:
         with (
             patch("src.tools.multimodal.search_trains", return_value=train_resp),
             patch("src.tools.multimodal.search_flights", return_value=flight_resp),
+            patch("src.tools.multimodal.search_buses", return_value=_BUS_ERROR),
         ):
             result = await compare_travel_options("Madrid", "Barcelona", _future_date())
 
@@ -157,6 +267,7 @@ class TestCompareTravelOptionsPartial:
         with (
             patch("src.tools.multimodal.search_trains", side_effect=RuntimeError("crash")),
             patch("src.tools.multimodal.search_flights", return_value=flight_resp),
+            patch("src.tools.multimodal.search_buses", return_value=_BUS_ERROR),
         ):
             result = await compare_travel_options("Madrid", "Barcelona", _future_date())
 
@@ -172,6 +283,7 @@ class TestCompareTravelOptionsAllDown:
         with (
             patch("src.tools.multimodal.search_trains", return_value=train_resp),
             patch("src.tools.multimodal.search_flights", return_value=flight_resp),
+            patch("src.tools.multimodal.search_buses", return_value=_BUS_ERROR),
         ):
             result = await compare_travel_options("Madrid", "Barcelona", _future_date())
 
@@ -181,6 +293,7 @@ class TestCompareTravelOptionsAllDown:
         with (
             patch("src.tools.multimodal.search_trains", side_effect=RuntimeError("train crash")),
             patch("src.tools.multimodal.search_flights", side_effect=RuntimeError("flight crash")),
+            patch("src.tools.multimodal.search_buses", side_effect=RuntimeError("bus crash")),
         ):
             result = await compare_travel_options("Madrid", "Barcelona", _future_date())
 

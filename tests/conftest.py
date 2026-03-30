@@ -5,6 +5,7 @@ from datetime import datetime
 import pytest
 
 from src.config import get_settings
+from src.models.bus import BusResult
 from src.models.flight import Airport, FlightResult
 from src.models.train import Station, TrainResult
 
@@ -22,6 +23,7 @@ def mock_env(monkeypatch):
     monkeypatch.setenv("SPAIN_TRAVEL_SERPAPI_API_KEY", "test_serpapi_key_fake")
     monkeypatch.setenv("SPAIN_TRAVEL_OUIGO_ENABLED", "true")
     monkeypatch.setenv("SPAIN_TRAVEL_CACHE_DIR", "/tmp/test_spain_travel_cache")
+    monkeypatch.setenv("SPAIN_TRAVEL_FLIXBUS_API_KEY", "test_key")
     get_settings.cache_clear()
 
 
@@ -80,6 +82,22 @@ def sample_ouigo_train_result() -> TrainResult:
         price_eur=9.99,
         currency="EUR",
         booking_url="https://www.ouigo.com/es/",
+    )
+
+
+@pytest.fixture
+def sample_bus_result() -> BusResult:
+    return BusResult(
+        operator="FlixBus",
+        departure_station="Madrid Atocha Train Station",
+        arrival_station="Barcelona (Sants)",
+        departure_time=datetime(2099, 6, 15, 6, 9, 0),
+        arrival_time=datetime(2099, 6, 15, 9, 25, 0),
+        duration_minutes=196,
+        price_eur=56.35,
+        currency="EUR",
+        changeovers=0,
+        booking_url="https://shop.flixbus.com/search",
     )
 
 
