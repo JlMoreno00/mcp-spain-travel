@@ -5,6 +5,7 @@ from datetime import datetime
 import pytest
 
 from src.config import get_settings
+from src.models.accommodation import AccommodationResult
 from src.models.bus import BusResult
 from src.models.flight import Airport, FlightResult
 from src.models.train import Station, TrainResult
@@ -115,4 +116,22 @@ def sample_flight_result() -> FlightResult:
         currency="EUR",
         stops=0,
         cabin_class="ECONOMY",
+    )
+
+
+@pytest.fixture
+def sample_accommodation_result() -> AccommodationResult:
+    return AccommodationResult(
+        name="Hotel Dorsett Madrid",
+        hotel_class="Hotel de 4 estrellas",
+        rating=4.2,
+        price_per_night_eur=64.0,
+        total_price_eur=128.0,
+        accommodation_type="Hotel",
+        check_in_time="3:00 PM",
+        check_out_time="12:00 PM",
+        latitude=40.42,
+        longitude=-3.70,
+        link="https://www.google.com/travel/hotels/entity/example",
+        amenities=["WiFi", "Pool", "Parking"],
     )

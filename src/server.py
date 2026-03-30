@@ -6,6 +6,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from src.config import get_settings
+from src.tools.accommodation import search_accommodation as _search_accommodation
 from src.tools.buses import list_bus_stations as _list_bus_stations
 from src.tools.buses import search_buses as _search_buses
 from src.tools.flights import search_flights as _search_flights
@@ -139,6 +140,30 @@ async def list_train_stations(
         station_type: Service filter — "all" (default), "cercanias", "feve", or "ld"
     """
     return await _list_train_stations(city, station_type)
+
+
+@mcp.tool()
+async def search_accommodation(
+    destination: str,
+    check_in_date: str,
+    check_out_date: str,
+    adults: int = 2,
+    max_price: float | None = None,
+) -> dict[str, Any]:
+    """Search for hotels and accommodation in Spanish cities.
+
+    Returns prices, ratings, and amenities from Google Hotels.
+
+    Args:
+        destination: Spanish city name (e.g. "Madrid", "Barcelona", "Sevilla")
+        check_in_date: Check-in date in YYYY-MM-DD format — must be today or future
+        check_out_date: Check-out date in YYYY-MM-DD format — must be after check_in_date
+        adults: Number of adult guests (default 2)
+        max_price: Maximum price per night in EUR (optional filter)
+    """
+    return await _search_accommodation(
+        destination, check_in_date, check_out_date, adults, max_price
+    )
 
 
 def main() -> None:

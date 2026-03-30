@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     stations_ttl: int = 86_400  # 24h — station catalog changes rarely
     ouigo_ttl: int = 1_800  # 30min — prices are volatile
     flights_ttl: int = 3_600  # 1h — flight offers
+    hotels_ttl: int = 3_600
 
     # --- Storage ---
     cache_dir: Path = Path(".cache")
