@@ -1,5 +1,3 @@
-"""Train search tools — combines Renfe CKAN and OUIGO providers."""
-
 from __future__ import annotations
 
 import asyncio
@@ -9,6 +7,7 @@ from typing import Any
 
 from src.providers.ouigo import OUIGOProvider
 from src.providers.renfe.ckan import RenfeCKANProvider
+from src.providers.renfe.scraper import search_with_prices as dwr_search
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +45,12 @@ async def search_trains(
             }
         }
 
-    renfe = RenfeCKANProvider()
+    renfe_ckan = RenfeCKANProvider()
     ouigo = OUIGOProvider()
 
-    ouigo_result, renfe_result = await asyncio.gather(
+    ouigo_result, dwr_result = await asyncio.gather(
         ouigo.search_trains(origin, destination, date, passengers),
-        renfe.search_trains(origin, destination, date, passengers),
+        dwr_search(origin, destination, date),
         return_exceptions=True,
     )
 
@@ -66,13 +65,30 @@ async def search_trains(
     elif isinstance(ouigo_result, list):
         results.extend(ouigo_result)
 
-    if isinstance(renfe_result, Exception):
+    if isinstance(dwr_result, Exception):
         logger.warning(
-            "Renfe search failed (origin=%s, dest=%s): %s", origin, destination, renfe_result
+            "Renfe DWR scraper failed (origin=%s, dest=%s): %s — falling back to GTFS",
+            origin,
+            destination,
+            dwr_result,
         )
-        provider_errors.append(f"Renfe: {renfe_result}")
-    elif isinstance(renfe_result, list):
-        results.extend(renfe_result)
+        try:
+            gtfs_result = await renfe_ckan.search_trains(origin, destination, date, passengers)
+            results.extend(gtfs_result)
+            if gtfs_result:
+                provider_errors.append(
+                    f"Renfe DWR (price scraper unavailable, using GTFS schedules): {dwr_result}"
+                )
+        except Exception as exc:
+            provider_errors.append(f"Renfe: {exc}")
+    elif isinstance(dwr_result, list):
+        results.extend(dwr_result)
+        if not dwr_result:
+            try:
+                gtfs_result = await renfe_ckan.search_trains(origin, destination, date, passengers)
+                results.extend(gtfs_result)
+            except Exception as exc:
+                provider_errors.append(f"Renfe: {exc}")
 
     if not results and len(provider_errors) == 2:
         return {
@@ -84,7 +100,7 @@ async def search_trains(
 
     if not results and not provider_errors:
         try:
-            stations = await renfe.list_stations()
+            stations = await renfe_ckan.list_stations()
             origin_lower = origin.lower()
             dest_lower = destination.lower()
 
@@ -146,9 +162,9 @@ async def list_train_stations(
         {"stations": [...], "count": int}
         or {"error": {"code": "PROVIDER_ERROR", "message": "..."}}
     """
-    renfe = RenfeCKANProvider()
+    renfe_ckan = RenfeCKANProvider()
     try:
-        stations = await renfe.list_stations(city=city, station_type=station_type)
+        stations = await renfe_ckan.list_stations(city=city, station_type=station_type)
     except Exception as exc:
         logger.error("Failed to list stations: %s", exc)
         return {

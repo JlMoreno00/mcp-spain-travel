@@ -14,10 +14,10 @@ keywords = ["mcp", "travel", "spain", "renfe", "ouigo", "duffel"]
 dependencies = [
     "fastmcp>=3.0.2",
     "httpx>=0.27",
+    "json5>=0.9",
     "pydantic>=2",
     "pydantic-settings>=2.0",
     "ouigo>=1.0.4,<2.0",
-
 ]
 
 [project.optional-dependencies]
