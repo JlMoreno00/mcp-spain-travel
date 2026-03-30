@@ -7,6 +7,7 @@ from typing import Any
 
 from src.providers.ouigo import OUIGOProvider
 from src.providers.renfe.ckan import RenfeCKANProvider
+from src.providers.renfe.connections import ConnectionFinder
 from src.providers.renfe.scraper import search_with_prices as dwr_search
 
 logger = logging.getLogger(__name__)
@@ -98,6 +99,17 @@ async def search_trains(
             }
         }
 
+    connections: list = []
+    connections_count = 0
+    if len(results) < 3:
+        try:
+            finder = ConnectionFinder()
+            raw_connections = await finder.find_connections(origin, destination, date)
+            connections = [c.model_dump(mode="json") for c in raw_connections]
+            connections_count = len(connections)
+        except Exception as exc:
+            logger.warning("Connection search failed for %s→%s: %s", origin, destination, exc)
+
     if not results and not provider_errors:
         try:
             stations = await renfe_ckan.list_stations()
@@ -144,7 +156,9 @@ async def search_trains(
 
     return {
         "results": [r.model_dump(mode="json") for r in results],
+        "connections": connections,
         "count": len(results),
+        "connections_count": connections_count,
         "partial": len(provider_errors) > 0,
         "provider_errors": provider_errors,
     }

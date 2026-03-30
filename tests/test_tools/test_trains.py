@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.models.train import Station
+from src.models.connection import MultiLegResult, TrainLeg
+from src.models.train import Station, TrainResult
 from src.tools.trains import list_train_stations, search_trains
 
 
@@ -29,6 +30,12 @@ def _barcelona_station() -> Station:
     )
 
 
+def _no_connections():
+    mock = MagicMock()
+    mock.find_connections = AsyncMock(return_value=[])
+    return mock
+
+
 class TestSearchTrainsValidation:
     async def test_past_date_returns_invalid_date_error(self):
         result = await search_trains("Madrid", "Barcelona", "2020-01-01")
@@ -50,6 +57,7 @@ class TestSearchTrainsValidation:
         with (
             patch("src.tools.trains.RenfeCKANProvider", return_value=mock_renfe),
             patch("src.tools.trains.OUIGOProvider", return_value=mock_ouigo),
+            patch("src.tools.trains.ConnectionFinder", return_value=_no_connections()),
         ):
             result = await search_trains("Madrid", "Barcelona", today)
 
@@ -68,6 +76,7 @@ class TestSearchTrainsHappyPath:
         with (
             patch("src.tools.trains.RenfeCKANProvider", return_value=mock_renfe),
             patch("src.tools.trains.OUIGOProvider", return_value=mock_ouigo),
+            patch("src.tools.trains.ConnectionFinder", return_value=_no_connections()),
         ):
             result = await search_trains("Madrid", "Barcelona", _future_date())
 
@@ -90,6 +99,7 @@ class TestSearchTrainsHappyPath:
         with (
             patch("src.tools.trains.RenfeCKANProvider", return_value=mock_renfe),
             patch("src.tools.trains.OUIGOProvider", return_value=mock_ouigo),
+            patch("src.tools.trains.ConnectionFinder", return_value=_no_connections()),
         ):
             result = await search_trains("Madrid", "Barcelona", _future_date())
 
@@ -107,6 +117,7 @@ class TestSearchTrainsDegradation:
         with (
             patch("src.tools.trains.RenfeCKANProvider", return_value=mock_renfe),
             patch("src.tools.trains.OUIGOProvider", return_value=mock_ouigo),
+            patch("src.tools.trains.ConnectionFinder", return_value=_no_connections()),
         ):
             result = await search_trains("Madrid", "Barcelona", _future_date())
 
@@ -125,6 +136,7 @@ class TestSearchTrainsDegradation:
         with (
             patch("src.tools.trains.RenfeCKANProvider", return_value=mock_renfe),
             patch("src.tools.trains.OUIGOProvider", return_value=mock_ouigo),
+            patch("src.tools.trains.ConnectionFinder", return_value=_no_connections()),
         ):
             result = await search_trains("Madrid", "Barcelona", _future_date())
 
@@ -159,6 +171,7 @@ class TestSearchTrainsUnknownStation:
         with (
             patch("src.tools.trains.RenfeCKANProvider", return_value=mock_renfe),
             patch("src.tools.trains.OUIGOProvider", return_value=mock_ouigo),
+            patch("src.tools.trains.ConnectionFinder", return_value=_no_connections()),
         ):
             result = await search_trains("XYZ_INVALID", "Barcelona", _future_date())
 
@@ -175,6 +188,7 @@ class TestSearchTrainsUnknownStation:
         with (
             patch("src.tools.trains.RenfeCKANProvider", return_value=mock_renfe),
             patch("src.tools.trains.OUIGOProvider", return_value=mock_ouigo),
+            patch("src.tools.trains.ConnectionFinder", return_value=_no_connections()),
         ):
             result = await search_trains("Madrid", "INVALID_DEST", _future_date())
 
@@ -220,3 +234,102 @@ class TestListTrainStations:
 
         assert result["count"] == 0
         assert result["stations"] == []
+
+
+class TestSearchTrainsConnections:
+    def _make_multi_leg_result(self) -> MultiLegResult:
+        base = datetime(2099, 6, 15)
+        return MultiLegResult(
+            legs=[
+                TrainLeg(
+                    operator="Renfe AVE",
+                    origin="Madrid",
+                    destination="ZARAGOZA DELICIAS",
+                    departure_time=base.replace(hour=9, minute=0),
+                    arrival_time=base.replace(hour=10, minute=30),
+                    duration_minutes=90,
+                    price_eur=20.0,
+                ),
+                TrainLeg(
+                    operator="Renfe AVE",
+                    origin="ZARAGOZA DELICIAS",
+                    destination="Barcelona",
+                    departure_time=base.replace(hour=12, minute=0),
+                    arrival_time=base.replace(hour=13, minute=30),
+                    duration_minutes=90,
+                    price_eur=25.0,
+                ),
+            ],
+            total_duration_minutes=270,
+            total_price_eur=45.0,
+            connection_station="ZARAGOZA DELICIAS",
+            connection_wait_minutes=90,
+        )
+
+    async def test_connections_field_always_present(
+        self, sample_train_result, sample_ouigo_train_result
+    ):
+        mock_renfe = AsyncMock()
+        mock_renfe.search_trains.return_value = [sample_train_result]
+        mock_ouigo = AsyncMock()
+        mock_ouigo.search_trains.return_value = [sample_ouigo_train_result]
+
+        with (
+            patch("src.tools.trains.RenfeCKANProvider", return_value=mock_renfe),
+            patch("src.tools.trains.OUIGOProvider", return_value=mock_ouigo),
+            patch("src.tools.trains.ConnectionFinder", return_value=_no_connections()),
+        ):
+            result = await search_trains("Madrid", "Barcelona", _future_date())
+
+        assert "connections" in result
+        assert "connections_count" in result
+        assert result["connections_count"] == 0
+
+    async def test_connections_attempted_when_direct_results_empty(self):
+        mock_renfe = AsyncMock()
+        mock_renfe.search_trains.return_value = []
+        mock_renfe.list_stations.return_value = [_madrid_station(), _barcelona_station()]
+        mock_ouigo = AsyncMock()
+        mock_ouigo.search_trains.return_value = []
+
+        mock_finder = MagicMock()
+        mock_finder.find_connections = AsyncMock(return_value=[self._make_multi_leg_result()])
+
+        with (
+            patch("src.tools.trains.RenfeCKANProvider", return_value=mock_renfe),
+            patch("src.tools.trains.OUIGOProvider", return_value=mock_ouigo),
+            patch("src.tools.trains.ConnectionFinder", return_value=mock_finder),
+        ):
+            result = await search_trains("Madrid", "Barcelona", _future_date())
+
+        mock_finder.find_connections.assert_called_once()
+        assert result["connections_count"] == 1
+        assert len(result["connections"]) == 1
+
+    async def test_connections_not_attempted_when_three_or_more_direct_results(self):
+        train = TrainResult(
+            operator="Renfe AVE",
+            origin_code="60000",
+            destination_code="71801",
+            departure_time=datetime(2099, 6, 15, 10, 0),
+            arrival_time=datetime(2099, 6, 15, 12, 30),
+            duration_minutes=150,
+            price_eur=45.0,
+        )
+        mock_renfe = AsyncMock()
+        mock_renfe.search_trains.return_value = [train, train, train]
+        mock_ouigo = AsyncMock()
+        mock_ouigo.search_trains.return_value = []
+
+        mock_finder = MagicMock()
+        mock_finder.find_connections = AsyncMock(return_value=[])
+
+        with (
+            patch("src.tools.trains.RenfeCKANProvider", return_value=mock_renfe),
+            patch("src.tools.trains.OUIGOProvider", return_value=mock_ouigo),
+            patch("src.tools.trains.ConnectionFinder", return_value=mock_finder),
+        ):
+            result = await search_trains("Madrid", "Barcelona", _future_date())
+
+        mock_finder.find_connections.assert_not_called()
+        assert result["count"] == 3
